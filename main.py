@@ -3,35 +3,45 @@ import itertools
 import requests
 
 
-def budget_filter(combination):
+def budget_filter(combination, budget):
     driver_price = sum(map(lambda driver: driver['price'], combination[0]))
     constructor_price = combination[1]['price']
-    budget = 100
     is_budget_right = driver_price + constructor_price < budget
     is_turbo_okay = combination[0][combination[2]]['price'] < 20
-    return is_budget_right and is_turbo_okay
+    is_mega_okay = combination[0][combination[3]] != combination[0][combination[2]]
+    return is_budget_right and is_turbo_okay and is_mega_okay
 
 
-def get_points(combination):
-    driver_points = sum(map(lambda x: get_points_for_player(x, combination[2]), enumerate(combination[0])))
+def calculate_points(combination, with_mega_driver):
+    driver_points = sum(
+        map(lambda x: get_points_for_player(x, combination[2], combination[3], with_mega_driver),
+            enumerate(combination[0])))
     constructor_points = combination[1]['season_score']
-    return driver_points + constructor_points
+    total_points = driver_points + constructor_points
+    return combination[0], combination[1], combination[2], combination[3], total_points
 
 
-def get_points_for_player(x, y):
-    season_score = x[1]['season_score']
-    if x[0] == y:
+def get_points_for_player(driver, turbo_driver_num, mega_driver_num, with_mega_driver):
+    season_score = driver[1]['season_score']
+    if driver[0] == turbo_driver_num:
         return 2 * season_score
+    elif driver[0] == mega_driver_num and with_mega_driver:
+        return 3 * season_score
     else:
         return season_score
 
 
 if __name__ == '__main__':
+    budget = 102.9
+    number_of_drivers = 5
+    with_mega_driver = True
     json = requests.get("https://fantasy-api.formula1.com/f1/2022/players").json()['players']
     drivers = list(filter(lambda x: x['position'] == 'Driver', json))
     constructors = list(filter(lambda x: x['position'] == 'Constructor', json))
-    all_combinations = list(itertools.product(itertools.combinations(drivers, 5), constructors, range(5)))
-    possible_combinations = list(filter(budget_filter, all_combinations))
-    best_combination = max(possible_combinations, key=get_points)
-    worst_combination = min(possible_combinations, key=get_points)
-    debug = True
+    all_combinations = itertools.product(
+        itertools.combinations(drivers, number_of_drivers), constructors, range(number_of_drivers),
+        range(number_of_drivers))
+    possible_combinations = filter(lambda x: budget_filter(x, budget), all_combinations)
+    combinations_with_points = list(map(lambda x: calculate_points(x, with_mega_driver), possible_combinations))
+    best_combination = max(combinations_with_points, key=lambda x: x[4])
+    print(best_combination)
